@@ -78,10 +78,6 @@ pub fn task2<S: AsRef<str>>(lines: &[S]) -> Result<i32> {
             ans += (next_pos / -100) + if pos == 0 { 0 } else { 1 };
         }
         pos = (next_pos % module + module) % module;
-        // println!(
-        //     "cmd={}, next_pos={}, pos={}, ans={}",
-        //     cmd, next_pos, pos, ans
-        // );
     }
     Ok(ans)
 }
