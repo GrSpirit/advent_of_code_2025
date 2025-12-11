@@ -1,59 +1,83 @@
-use regex::Regex;
-
 #[derive(thiserror::Error, Debug, Clone, Copy, Eq, PartialEq)]
 pub enum Error {
     #[error("Parse error")]
-    ParseError
+    ParseError,
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-pub fn task1<S: AsRef<str>>(lines: &[S]) -> Result<i32> {
-    let mut result = 0;
-    let input: String = lines.iter().map(|l| l.as_ref()).collect::<Vec<&str>>().concat();
-    let re = Regex::new(r"mul\((\d+),(\d+)\)").unwrap();
-    for (_, [xs, ys]) in re.captures_iter(&input).map(|c| c.extract()) {
-        let x = xs.parse::<i32>().map_err(|_| Error::ParseError)?;
-        let y = ys.parse::<i32>().map_err(|_| Error::ParseError)?;
-        result += x * y;
-    }
-    Ok(result)
+fn max_pair(s: &str) -> i32 {
+    let (m1, m2) = s.bytes().fold((b'0', b'0'), |(m1, m2), b| {
+        if m2 > m1 {
+            (m2, b)
+        } else {
+            if b > m2 {
+                (m1, b)
+            } else {
+                (m1, m2)
+            }
+        }
+    });
+    (m1 - b'0') as i32 * 10 + (m2 - b'0') as i32
 }
 
-pub fn task2<S: AsRef<str>>(lines: &[S]) -> Result<i32> {
-    let mut result = 0;
-    let mut is_mul_enabled = true;
-    let input: String = lines.iter().map(|l| l.as_ref()).collect::<Vec<&str>>().concat();
-    let re = Regex::new(r"(?<mul>mul\((\d+),(\d+)\))|(?<disable>don't\(\))|(?<enable>do\(\))").unwrap();
-    for cap in re.captures_iter(&input) {
-        if cap.name("disable").is_some() {
-            is_mul_enabled = false;
-        } else if cap.name("enable").is_some() {
-            is_mul_enabled = true;
-        } else if cap.name("mul").is_some() && is_mul_enabled {
-            let x = cap[2].parse::<i32>().map_err(|_| Error::ParseError)?;
-            let y = cap[3].parse::<i32>().map_err(|_| Error::ParseError)?;
-            result += x * y;
+fn reorder(mut v: Vec<u8>) -> std::result::Result<Vec<u8>, Vec<u8>> {
+    for i in 1..v.len() {
+        if v[i - 1] < v[i] {
+            v.remove(i - 1);
+            return Ok(v);
         }
     }
-    Ok(result)
+    return Err(v);
+}
+
+fn max_twelve(s: &str) -> u64 {
+    let bytes = s.as_bytes();
+    let mut twelve = bytes[..12].to_vec();
+    for &b in bytes.iter().skip(12) {
+        twelve = match reorder(twelve) {
+            Ok(mut changed) => {
+                changed.push(b);
+                changed
+            }
+            Err(mut changed) => {
+                if let Some(x) = changed.last_mut() {
+                    *x = b.max(*x);
+                }
+                changed
+            }
+        };
+    }
+    twelve
+        .into_iter()
+        .fold(0u64, |acc, b| acc * 10 + (b - b'0') as u64)
+}
+
+pub fn task1<S: AsRef<str>>(lines: &[S]) -> Result<i32> {
+    Ok(lines.iter().map(|line| max_pair(line.as_ref())).sum())
+}
+
+pub fn task2<S: AsRef<str>>(lines: &[S]) -> Result<u64> {
+    Ok(lines.iter().map(|line| max_twelve(line.as_ref())).sum())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    const DATA1: &str = r"xmul(2,4)%&mul[3,7]!@^do_not_mul(5,5)+mul(32,64]then(mul(11,8)mul(8,5))";
-    const DATA2: &str = r"xmul(2,4)&mul[3,7]!^don't()_mul(5,5)+mul(32,64](mul(11,8)undo()?mul(8,5))";
+    const DATA1: &str = r"987654321111111
+811111111111119
+234234234234278
+818181911112111";
     #[test]
     fn task1_test() {
         let lines = DATA1.lines().collect::<Vec<_>>();
         let result = task1(&lines);
-        assert_eq!(Ok(161), result);
+        assert_eq!(Ok(357), result);
     }
     #[test]
     fn task2_test() {
-        let lines = DATA2.lines().collect::<Vec<_>>();
+        let lines = DATA1.lines().collect::<Vec<_>>();
         let result = task2(&lines);
-        assert_eq!(Ok(48), result);
+        assert_eq!(Ok(3121910778619), result);
     }
 }
