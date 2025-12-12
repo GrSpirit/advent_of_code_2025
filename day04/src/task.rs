@@ -1,51 +1,62 @@
-use strum::IntoEnumIterator;
-use strum_macros::EnumIter;
+use std::mem;
 
 #[derive(thiserror::Error, Debug, Clone, Copy, Eq, PartialEq)]
 pub enum Error {
     #[error("Parse error")]
-    ParseError
-}
-
-#[derive(Debug, Clone, Copy, Eq, PartialEq, EnumIter)]
-enum Direction {
-    Up,
-    Down,
-    Left,
-    Right,
-    UpLeft,
-    UpRight,
-    DownLeft,
-    DownRight,
+    ParseError,
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-fn search_word(grid: &Vec<Vec<char>>, word: &str, dir: Direction, ii: usize, jj: usize) -> bool {
-    let Some(c) = word.chars().next() else { return true; };
-    match dir {
-        Direction::Up => ii > 0 && grid[ii - 1][jj] == c && search_word(grid, &word[1..], Direction::Up, ii - 1, jj),
-        Direction::Down => ii < grid.len() - 1 && grid[ii + 1][jj] == c && search_word(grid, &word[1..], Direction::Down, ii + 1, jj),
-        Direction::Left => jj > 0 && grid[ii][jj - 1] == c && search_word(grid, &word[1..], Direction::Left, ii, jj - 1),
-        Direction::Right => jj < grid[0].len() - 1 && grid[ii][jj + 1] == c && search_word(grid, &word[1..], Direction::Right, ii, jj + 1),
-        Direction::UpLeft => ii > 0 && jj > 0 && grid[ii - 1][jj - 1] == c && search_word(grid, &word[1..], Direction::UpLeft, ii - 1, jj - 1),
-        Direction::UpRight => ii > 0 && jj < grid[0].len() - 1 && grid[ii - 1][jj + 1] == c && search_word(grid, &word[1..], Direction::UpRight, ii - 1, jj + 1),
-        Direction::DownLeft => ii < grid.len() - 1 && jj > 0 && grid[ii + 1][jj - 1] == c && search_word(grid, &word[1..], Direction::DownLeft, ii + 1, jj - 1),
-        Direction::DownRight => ii < grid.len() - 1 && jj < grid[0].len() - 1 && grid[ii + 1][jj + 1] == c && search_word(grid, &word[1..], Direction::DownRight, ii + 1, jj + 1),
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+enum Cell {
+    Empty,
+    Roll,
+}
+
+fn parse_cell(c: char) -> Result<Cell> {
+    match c {
+        '.' => Ok(Cell::Empty),
+        '@' => Ok(Cell::Roll),
+        _ => Err(Error::ParseError),
     }
 }
 
+fn count_rolls(grid: &Vec<Vec<Cell>>, i: usize, j: usize) -> u8 {
+    let start_i = i.checked_sub(1).unwrap_or(0);
+    let end_i = grid.len().min(i + 2);
+    let start_j = j.checked_sub(1).unwrap_or(0);
+    let end_j = grid[0].len().min(j + 2);
+    let mut result = 0;
+    for ii in start_i..end_i {
+        for jj in start_j..end_j {
+            if ii == i && jj == j {
+                continue;
+            }
+            if grid[ii][jj] == Cell::Roll {
+                result += 1;
+            }
+        }
+    }
+    result
+}
+
 pub fn task1<S: AsRef<str>>(lines: &[S]) -> Result<i32> {
-    let grid = lines.into_iter().map(|line| line.as_ref().chars().collect::<Vec<_>>()).collect::<Vec<Vec<char>>>();
+    let grid = lines
+        .into_iter()
+        .map(|line| {
+            line.as_ref()
+                .chars()
+                .map(parse_cell)
+                .collect::<Result<Vec<Cell>>>()
+        })
+        .collect::<Result<Vec<Vec<Cell>>>>()?;
+    let (n, m) = (grid.len(), grid[0].len());
     let mut count = 0;
-    for i in 0..grid.len() {
-        for j in 0..grid[0].len() {
-            if grid[i][j] == 'X' {
-                for dir in Direction::iter() {
-                    if search_word(&grid, "MAS", dir, i, j) {
-                        count += 1;
-                    }
-                }
+    for i in 0..n {
+        for j in 0..m {
+            if grid[i][j] == Cell::Roll && count_rolls(&grid, i, j) < 4 {
+                count += 1;
             }
         }
     }
@@ -53,18 +64,37 @@ pub fn task1<S: AsRef<str>>(lines: &[S]) -> Result<i32> {
 }
 
 pub fn task2<S: AsRef<str>>(lines: &[S]) -> Result<i32> {
-    let grid = lines.into_iter().map(|line| line.as_ref().chars().collect::<Vec<_>>()).collect::<Vec<Vec<char>>>();
+    let mut grid = lines
+        .into_iter()
+        .map(|line| {
+            line.as_ref()
+                .chars()
+                .map(parse_cell)
+                .collect::<Result<Vec<Cell>>>()
+        })
+        .collect::<Result<Vec<Vec<Cell>>>>()?;
+    let (n, m) = (grid.len(), grid[0].len());
+    let mut new_grid = vec![vec![Cell::Empty; m]; n];
     let mut count = 0;
-    for i in 1..grid.len() - 1 {
-        for j in 1..grid[0].len() - 1 {
-            if grid[i][j] == 'A' {
-                let first = (grid[i - 1][j - 1] == 'M' && grid[i + 1][j + 1] == 'S') || (grid[i - 1][j - 1] == 'S' && grid[i + 1][j + 1] == 'M');
-                let second = (grid[i - 1][j + 1] == 'M' && grid[i + 1][j - 1] == 'S') || (grid[i - 1][j + 1] == 'S' && grid[i + 1][j - 1] == 'M');
-                if first && second {
-                    count += 1;
+    let mut is_changed = true;
+    while is_changed {
+        is_changed = false;
+        for i in 0..n {
+            for j in 0..m {
+                if grid[i][j] == Cell::Roll {
+                    if count_rolls(&grid, i, j) < 4 {
+                        count += 1;
+                        is_changed = true;
+                        new_grid[i][j] = Cell::Empty;
+                    } else {
+                        new_grid[i][j] = Cell::Roll;
+                    }
+                } else {
+                    new_grid[i][j] = Cell::Empty;
                 }
             }
         }
+        mem::swap(&mut grid, &mut new_grid);
     }
     Ok(count)
 }
@@ -72,26 +102,26 @@ pub fn task2<S: AsRef<str>>(lines: &[S]) -> Result<i32> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    const DATA: &str = r"MMMSXXMASM
-MSAMXMSMSA
-AMXSXMAAMM
-MSAMASMSMX
-XMASAMXAMM
-XXAMMXXAMA
-SMSMSASXSS
-SAXAMASAAA
-MAMMMXMMMM
-MXMXAXMASX";
+    const DATA: &str = r"..@@.@@@@.
+@@@.@.@.@@
+@@@@@.@.@@
+@.@@@@..@.
+@@.@@@@.@@
+.@@@@@@@.@
+.@.@.@.@@@
+@.@@@.@@@@
+.@@@@@@@@.
+@.@.@@@.@.";
     #[test]
     fn task1_test() {
         let lines = DATA.lines().collect::<Vec<_>>();
         let result = task1(&lines);
-        assert_eq!(Ok(18), result);
+        assert_eq!(Ok(13), result);
     }
     #[test]
     fn task2_test() {
         let lines = DATA.lines().collect::<Vec<_>>();
         let result = task2(&lines);
-        assert_eq!(Ok(9), result);
+        assert_eq!(Ok(43), result);
     }
 }
