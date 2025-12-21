@@ -26,13 +26,11 @@ fn parse_input<S: AsRef<str>>(lines: &[S]) -> Result<Vec<I64Vec2>> {
 
 pub fn task1<S: AsRef<str>>(lines: &[S]) -> Result<i64> {
     let points = parse_input(lines)?;
-    let n = points.len();
-    let mut max_square = 0;
-    for i in 0..n {
-        for j in (i + 1)..n {
-            max_square = max_square.max(square(&points[i], &points[j]));
-        }
-    }
+    let max_square = points.iter()
+        .tuple_combinations()
+        .map(|(a, b)| square(a, b))
+        .max()
+        .ok_or(Error::FormatError)?;
     Ok(max_square)
 }
 
